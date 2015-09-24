@@ -1,0 +1,113 @@
+---
+title: "Practical Machine Learning Project 1"
+author: "John Smith"
+geometry: margin=1cm
+output: 
+  html_document:
+    keep_md: true
+fontsize: 10pt
+---
+  
+## Executive Summary
+  Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+  
+  In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+  
+  This project determined that the random forest model with a setting of 7 random variables per split resulted in high prediction accurary, assuming the training data is cleaned of invalid rows and unhelpful columns.
+
+## Data
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+```{r data, echo = TRUE}
+set.seed(22938)
+library(caret)
+library(randomForest)
+pmltraining <- read.csv("pml-training.csv")
+pmltesting <- read.csv("pml-testing.csv")
+str(pmltraining)
+```
+
+The structure of the data has `r dim(pmltraining)[2]` predictors.
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment. 
+
+Notice there are alot of invalid rows and unhelpful columns in the data.
+
+## Cleaning
+
+Remove non numerical columns
+```{r removenonnumeric, echo = TRUE}
+pmltrainingclasse <- pmltraining$classe
+pmltraining <- pmltraining[,sapply(pmltraining, is.numeric)]
+pmltraining$classe <- pmltrainingclasse
+pmltestingclasse <- pmltesting$classe
+pmltesting <- pmltesting[,sapply(pmltesting, is.numeric)]
+pmltesting$classe <- pmltestingclasse
+```
+
+Remove zero variance predictors columns
+```{r removezerovariance, echo = TRUE}
+pmltraining <- pmltraining[,nearZeroVar(pmltraining, saveMetrics = T)$nzv == FALSE]
+pmltesting <- pmltesting[,nearZeroVar(pmltesting, saveMetrics = T)$nzv == FALSE]
+```
+
+Remove columns that have more than 95% NA values
+```{r removenacols, echo TRUE}
+pmltraining <- pmltraining[colSums(is.na(pmltraining)) < (nrow(pmltraining) * 0.05)]
+pmltesting <- pmltesting[colSums(is.na(pmltesting)) < (nrow(pmltesting) * 0.05)]
+```
+
+Remove errata columns
+```{r removeerrcols, echo TRUE}
+pmltraining <- pmltraining[,!names(pmltraining) %in% c("X", "raw_timestamp_part_1", "raw_timestamp_part_2", "num_window")]
+pmltesting <- pmltesting[,!names(pmltesting) %in% c("X", "raw_timestamp_part_1", "raw_timestamp_part_2", "num_window")]
+```
+
+## Create Training and Test set
+
+Typical 80:20 split between training and validation sets was created
+```{r splitset, echo = TRUE}
+pmlpart <- createDataPartition(pmltraining$classe, p=0.8, list=FALSE)
+pmltrainset <- pmltraining[pmlpart,]
+pmlvalset <- pmltraining[-pmlpart,]
+```
+
+## Create Model
+A random forest model was created with the number of variables limited to 7 per split to speed up model creation.
+```{r modelrf, echo = TRUE}
+modFitrf <- randomForest(classe ~ ., data = pmltrainset, mtry=7, importance = TRUE)
+print(modFitrf)
+```
+The error rate of the model is very low for the training set. The restriction put on the model should reduce the overfitting.
+
+```{r valcomp, echo = TRUE}
+confusionMatrix(pmlvalset$classe, predict(modFitrf,pmlvalset))
+```
+The error rate of the out of sample (validation) set also resuts in a very low error rate
+
+## Conclusion
+The health data suggests the following conclusions:
+  
+* The health data can be accurately modeled with random forest prediction
+* Only a subset of the health data needs to be used to make accurate predictions
+
+## Appendix Assignment
+```{r submitassign, echo = TRUE}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+predicttest <- predict(modFitrf, pmltesting)
+print(predicttest)
+pml_write_files(as.vector(predicttest))
+```
